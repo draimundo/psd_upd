@@ -8,8 +8,8 @@
 from ctypes.wintypes import WORD
 import sys
 
-from PyQt5.QtCore import QObject, pyqtSlot
-from PyQt5.QtWidgets import QApplication, QBoxLayout, QComboBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QGridLayout, QPushButton, QSizePolicy, QSpacerItem, QStyleFactory, QTabWidget, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QApplication, QBoxLayout, QComboBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QGridLayout, QPushButton, QSizePolicy, QSpacerItem, QSpinBox, QStyleFactory, QTabWidget, QTextBrowser, QVBoxLayout, QWidget
 
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
@@ -34,7 +34,7 @@ class Window(QMainWindow):
 class View(QWidget):
     def __init__(self,name):
         super().__init__()
-        self.layout = QGridLayout(self)
+        self.layout = QHBoxLayout(self)
         self.tabs = QTabWidget()
         self.tabControl = QWidget()
         self.tabSetup = QWidget()
@@ -42,59 +42,56 @@ class View(QWidget):
         # Add tabs
         self.tabs.addTab(self.tabControl,"Control")
         self.tabs.addTab(self.tabSetup,"Setup")
-        
 
         # Create first tab
         self.createControlBox()
-        self.createPositionDisplay()
-        self.createConsoleOutput()
+        self.createPositionDisplayBox()
+        self.createConsoleOutputBox()
+        self.createSetupBox()
 
-        controlOuterLayout = QVBoxLayout()
-        self.tabControl.setLayout(controlOuterLayout)
+        controlSetupLayout = QVBoxLayout()
+        controlSetupLayout.addWidget(self.controlBox)
+        controlSetupLayout.addWidget(self.setupBox)
+        controlSetupLayout.addStretch(1)
         
-        controlTopLeftLayout = QVBoxLayout()
-        controlTopLeftLayout.addWidget(self.controlBox)
-        controlTopLeftLayout.addStretch(1)
-
-        controlTopLayout = QHBoxLayout()
-        controlTopLayout.addLayout(controlTopLeftLayout)
-        controlTopLayout.addWidget(self.positionDisplay)
-
-        controlOuterLayout.addLayout(controlTopLayout)
-        controlOuterLayout.addWidget(self.consoleOutput)
-
-        # Create second tab
-        sampleTimeSeconds = {"2":2,"5":5,"7":7,"10":10,"15":15,"20":20,"30":30,"60":60}
-        sampleComboBox = QComboBox()
-        sampleComboBox.addItems(sampleTimeSeconds.keys())
-        sampleLabel = QLabel("&Sample rate [s]:")
-        sampleLabel.setBuddy(sampleComboBox)
-
-        dataFormats = [".csv", ".xlsx", ".txt"]
-        dataFormatBox = QComboBox()
-        dataFormatBox.addItems(dataFormats)
-        dataFormatLabel = QLabel("&Format:")
-        dataFormatLabel.setBuddy(dataFormatBox)
+        controlSetupConsoleLayout = QHBoxLayout()
+        controlSetupConsoleLayout.addLayout(controlSetupLayout)
+        controlSetupConsoleLayout.addWidget(self.consoleOutputBox)
+        
+        outerLayout = QVBoxLayout()
+        outerLayout.addWidget(self.positionDisplayBox, stretch=4)
+        outerLayout.addLayout(controlSetupConsoleLayout)
 
         
-        setupTopBox = QGroupBox("Measurement setings")
-        setupTopLayout = QVBoxLayout()
-        setupTopLayout.addWidget(sampleLabel)
-        setupTopLayout.addWidget(sampleComboBox)
-        setupTopBox.setLayout(setupTopLayout)
+        # self.startButton.clicked.connect(self.startButton.setDisabled(True))
+        # self.startButton.clicked.connect(self.stopButton.setEnabled(True))
 
-        setupOuterLayout = QVBoxLayout()
-        setupOuterLayout.addWidget(setupTopBox)
-        self.tabSetup.setLayout(setupOuterLayout)
+        # self.stopButton.setDisabled(True)
+        # self.stopButton.clicked.connect(self.setupBox.setDisabled(False))
+        # self.stopButton.clicked.connect(self.stopButton.setDisabled(True))
+        # self.stopButton.clicked.connect(self.startButton.setEnabled(True))
 
         # Add tabs to widget
-        self.layout.addWidget(self.tabs)
+        self.layout.addLayout(outerLayout)
         self.setLayout(self.layout)
-        
+
+        self.startButton.clicked.connect(self.start_meas)
+        self.stopButton.clicked.connect(self.stop_meas)
+    
+    def start_meas(self):
+        self.startButton.setDisabled(True)
+        self.stopButton.setEnabled(True)
+        self.setupBox.setDisabled(True)
+
+    def stop_meas(self):
+        self.startButton.setDisabled(False)
+        self.stopButton.setEnabled(False)
+        self.setupBox.setDisabled(False)
+
     def createControlBox(self):
-        self.controlBox = QGroupBox("Control and Status")
-        startButton = QPushButton("START")
-        stopButton = QPushButton("STOP")
+        self.startButton = QPushButton("START")
+        self.stopButton = QPushButton("STOP")
+        self.stopButton.setDisabled(True)
 
         uartDesc = QLabel(self)
         uartDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
@@ -106,87 +103,96 @@ class View(QWidget):
         measDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
         measDesc.setText("MEAS:")
 
-        uartLed = QLed(self, onColour=QLed.Green, shape=QLed.Circle)
-        psdLed = QLed(self, onColour=QLed.Green, shape=QLed.Circle)
-        measLed = QLed(self, onColour=QLed.Green, shape=QLed.Circle)
+        self.uartLed = QPushButton()
+        self.uartLed.setDisabled(True)
+        self.uartLed.setStyleSheet("background-color:red")
+        self.psdLed = QPushButton()
+        self.psdLed.setDisabled(True)
+        self.psdLed.setStyleSheet("background-color:red")
+        self.measLed = QPushButton()
+        self.measLed.setDisabled(True)
+        self.measLed.setStyleSheet("background-color:red")
 
         timeDesc = QLabel(self)
         timeDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
         timeDesc.setText("Ending measurements in:")
-        timeText = QLabel(self)
-        timeText.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
-        timeText.setText("<b>09:10:10</b>")
+        self.timeText = QLabel(self)
+        self.timeText.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+        self.timeText.setText("<b>-</b>")
 
         layout = QGridLayout()
-        layout.addWidget(startButton,0,0,1,3)
-        layout.addWidget(stopButton,0,3,1,3)
+        layout.addWidget(self.startButton,0,0,1,3)
+        layout.addWidget(self.stopButton,0,3,1,3)
         layout.addWidget(uartDesc,1,0,1,2)
-        layout.addWidget(uartLed,2,0,1,2)
+        layout.addWidget(self.uartLed,2,0,1,2)
         layout.addWidget(psdDesc,1,2,1,2)
-        layout.addWidget(psdLed,2,2,1,2)
+        layout.addWidget(self.psdLed,2,2,1,2)
         layout.addWidget(measDesc,1,4,1,2)
-        layout.addWidget(measLed,2,4,1,2)
+        layout.addWidget(self.measLed,2,4,1,2)
         layout.addWidget(timeDesc,3,0,1,6)
-        layout.addWidget(timeText,4,0,1,6)
+        layout.addWidget(self.timeText,4,0,1,6)
 
-        # layout = QVBoxLayout()
-        # layout.addWidget(startButton)
-        # layout.addWidget(stopButton)
-        # layout.addWidget(uartText)
-        # layout.addWidget(uartLed)
-        # layout.addWidget(psdText)
-        # layout.addWidget(psdLed)
-        # layout.addWidget(measText)
-        # layout.addWidget(measLed)
-        # layout.addStretch()
-
+        self.controlBox = QGroupBox("Control and Status")
         self.controlBox.setLayout(layout)
 
-    def createPositionDisplay(self):
-        self.positionDisplay = QGroupBox("Position")
-        plot = AspectRatioWidget(pg.PlotWidget(),self.positionDisplay)
+    def createPositionDisplayBox(self):
+        self.plot = pg.PlotWidget()
+        self.plot.setAspectLocked()
         layout = QGridLayout()
-        layout.addWidget(plot,0,0)
-        self.positionDisplay.setLayout(layout)
+        layout.addWidget(self.plot,0,0)
 
-    def createConsoleOutput(self):
-        self.consoleOutput = QGroupBox("Console Output")
-        out = QTextBrowser()
-        out.append("Test")
+        self.positionDisplayBox = QGroupBox("Position")
+        self.positionDisplayBox.setLayout(layout)
+
+    def createConsoleOutputBox(self):
+        self.consoleOutputBox = QGroupBox("Console Output")
+        self.out = QTextBrowser()
+        self.out.append("Test")
         layout = QGridLayout()
-        layout.addWidget(out,0,0)
-        self.consoleOutput.setLayout(layout)
+        layout.addWidget(self.out,0,0)
+        self.consoleOutputBox.setLayout(layout)
 
+    def createSetupBox(self):
+        sampleRateBox = QSpinBox()
+        sampleRateBox.setMinimum(1)
+        sampleRateBox.setMaximum(60)
+        sampleLabel = QLabel("&Sample rate [s]:")
+        sampleLabel.setBuddy(sampleRateBox)
 
-class AspectRatioWidget(QWidget):
-    def __init__(self, widget, parent):
-        super().__init__(parent)
-        self.aspect_ratio = 1
-        layout = QBoxLayout(QBoxLayout.LeftToRight, self)
-        layout.setSpacing(0)
-        layout.setContentsMargins(0,0,0,0)
-        self.setLayout(layout)
-        #  add widget, then spacer
-        self.layout().addWidget(widget)
-        self.layout().addItem(QSpacerItem(0, 0))
+        measTimeBox = QSpinBox()
+        measTimeBox.setMinimum(1)
+        measTimeBox.setValue(60)
+        measTimeBox.setMaximum(14400)
+        measTimeLabel = QLabel("&Meas. time [min]:")
+        measTimeLabel.setBuddy(measTimeBox)
 
-    def resizeEvent(self, e):
-        w = e.size().width()
-        h = e.size().height()
-        if w / h > self.aspect_ratio:  # too wide
-            self.layout().setDirection(QBoxLayout.LeftToRight)
-            widget_stretch = h * self.aspect_ratio
-            outer_stretch = (w - widget_stretch) - 1
-        else:  # too tall
-            self.layout().setDirection(QBoxLayout.TopToBottom)
-            widget_stretch = w / self.aspect_ratio
-            outer_stretch = (h - widget_stretch) - 1 
+        dataFormats = [".csv", ".txt", ".xlsx"]
+        dataFormatBox = QComboBox()
+        dataFormatBox.addItems(dataFormats)
+        dataFormatLabel = QLabel("&Export format:")
+        dataFormatLabel.setBuddy(dataFormatBox)
+        
+        comPorts = ["none"]
+        comSelectBox = QComboBox()
+        comSelectBox.addItems(comPorts)
+        comSelectLabel = QLabel("COM port:")
+        comSelectLabel.setBuddy(comSelectBox)
 
-        self.layout().setStretch(0, widget_stretch)
-        self.layout().setStretch(1, outer_stretch)
+        setupLayout = QGridLayout()
+        setupLayout.addWidget(sampleLabel,0,0)
+        setupLayout.addWidget(sampleRateBox,0,1)
+        setupLayout.addWidget(measTimeLabel,1,0)
+        setupLayout.addWidget(measTimeBox,1,1)
+        setupLayout.addWidget(dataFormatLabel,2,0)
+        setupLayout.addWidget(dataFormatBox,2,1)
+        setupLayout.addWidget(comSelectLabel,3,0)
+        setupLayout.addWidget(comSelectBox,3,1)
+
+        self.setupBox = QGroupBox("Measurement setings")
+        self.setupBox.setLayout(setupLayout)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     ex = Window()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

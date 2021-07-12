@@ -12,10 +12,11 @@ class Serial_client():
   def __init__(self):
       self.serial = serial.Serial()
 
-  def list_ports():
+def list_ports():
     return list(serial.tools.list_ports.comports())
 
 
 if __name__ == "__main__":
   inst = Serial_client()
-  print(inst.list_ports())
+  for a in list_ports():
+    print(a)
