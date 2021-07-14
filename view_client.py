@@ -1,49 +1,41 @@
 '''
  # @ Author: Daniel Raimundo (DR)
- # @ Create Time: 2021-07-09 08:19:31
- # @ Modified time: 2021-07-09 08:26:36
+ # @ Create Time: 2021-07-14 07:47:05
+ # @ Modified time: 2021-07-14 07:47:17
  # @ Description:
  '''
 
-from ctypes.wintypes import WORD
-import sys
+from datetime import datetime
+from meas_client import MeasWorkerSignals, MeasWorker
+from numpy import double
+from serial_client import Serial_client
 
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QApplication, QBoxLayout, QComboBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QGridLayout, QPushButton, QSizePolicy, QSpacerItem, QSpinBox, QStyleFactory, QTabWidget, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QComboBox, QGroupBox, QHBoxLayout, QLabel, QGridLayout, QPushButton, QSpinBox, QTextBrowser, QVBoxLayout, QWidget
 
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
-
-from QLed import QLed
-
-class Window(QMainWindow):
-    def __init__(self):
-        super(Window, self).__init__()
-
-        self.setGeometry(0,0,724,839)
-        #self.showMaximized()
-        self.setWindowTitle("PSD_Viewer")
-
-        self.view = View(self)
-        self.setCentralWidget(self.view)
-
-        QApplication.setStyle(QStyleFactory.create('windowsvista'))
-
-        self.show()
 
 class View(QWidget):
     def __init__(self,name):
         super().__init__()
-        self.layout = QHBoxLayout(self)
-        self.tabs = QTabWidget()
-        self.tabControl = QWidget()
-        self.tabSetup = QWidget()
-        
-        # Add tabs
-        self.tabs.addTab(self.tabControl,"Control")
-        self.tabs.addTab(self.tabSetup,"Setup")
 
-        # Create first tab
+        self.generateLayout()
+
+        self.startButton.clicked.connect(self.startMeas)
+        self.stopButton.clicked.connect(self.stopMeas)
+
+        self.serial = Serial_client()
+        self.threadpool = QtCore.QThreadPool()
+        self.measSignal = MeasWorkerSignals()
+        self.measSignal.result.connect(self.appendLineToConsole)
+
+        self.comSelectBox.removeItem(0)
+        self.comSelectBox.addItems(self.serial.listPorts())
+    
+    def generateLayout(self):
+        self.layout = QHBoxLayout(self)
+
         self.createControlBox()
         self.createPositionDisplayBox()
         self.createConsoleOutputBox()
@@ -62,31 +54,67 @@ class View(QWidget):
         outerLayout.addWidget(self.positionDisplayBox, stretch=4)
         outerLayout.addLayout(controlSetupConsoleLayout)
 
-        
-        # self.startButton.clicked.connect(self.startButton.setDisabled(True))
-        # self.startButton.clicked.connect(self.stopButton.setEnabled(True))
-
-        # self.stopButton.setDisabled(True)
-        # self.stopButton.clicked.connect(self.setupBox.setDisabled(False))
-        # self.stopButton.clicked.connect(self.stopButton.setDisabled(True))
-        # self.stopButton.clicked.connect(self.startButton.setEnabled(True))
-
-        # Add tabs to widget
         self.layout.addLayout(outerLayout)
         self.setLayout(self.layout)
 
-        self.startButton.clicked.connect(self.start_meas)
-        self.stopButton.clicked.connect(self.stop_meas)
-    
-    def start_meas(self):
+    def startMeas(self):
         self.startButton.setDisabled(True)
         self.stopButton.setEnabled(True)
         self.setupBox.setDisabled(True)
 
-    def stop_meas(self):
+        #self.out.clear()
+        self.appendLineToConsole(self.serial.open(self.comSelectBox.currentText()))
+        self.ledColor(self.uartLed,True)
+
+        self.psdReady()
+        self.measReady()
+        self.measRunning()
+
+        self.sampleTimer.setInterval(self.sampleRateBox.value()*1000)
+        ret = self.sampleTimer.interval()
+        self.measTimer.setInterval(self.measTimeBox.value()*1000)
+
+        measWorker = MeasWorker(uartHandle=self.serial, signals=self.measSignal)
+        QtCore.QObject.connect(self.sampleTimer, QtCore.SIGNAL("timeout()"), measWorker.run())
+        self.sampleTimer.start()
+
+    def psdReady(self):
+        ret = self.serial.writeread(b"a")
+        if(ret == "PSD ist bereit"):
+            self.ledColor(self.psdLed,True)
+            self.appendLineToConsole("PSD is ready")
+            # TODO PSD not ready... 
+
+
+    def measReady(self):
+        ret = self.serial.writeread(b"b")
+        if(ret == "bereit zum messen"):
+            self.appendLineToConsole("Ready to measure")
+            #Meas not ready... TODO
+
+    def measRunning(self):
+        ret = self.serial.writeread(b"c")
+        if(ret == "Messungen laufen"):
+            self.ledColor(self.measLed,True)
+            self.appendLineToConsole("Measuring...")
+            #Meas not ready... TODO
+
+    def stopMeas(self):
         self.startButton.setDisabled(False)
         self.stopButton.setEnabled(False)
         self.setupBox.setDisabled(False)
+
+        self.ledColor(self.measLed,False)
+        self.ledColor(self.uartLed,False)
+        self.ledColor(self.psdLed,False)
+        self.serial.close()
+        self.appendLineToConsole("- - - - - - - - - - - - -")
+
+    def ledColor(self,led,status):
+        if status:
+            led.setStyleSheet("background-color:green")
+        else:
+            led.setStyleSheet("background-color:red")
 
     def createControlBox(self):
         self.startButton = QPushButton("START")
@@ -105,13 +133,13 @@ class View(QWidget):
 
         self.uartLed = QPushButton()
         self.uartLed.setDisabled(True)
-        self.uartLed.setStyleSheet("background-color:red")
+        self.ledColor(self.uartLed,False)
         self.psdLed = QPushButton()
         self.psdLed.setDisabled(True)
-        self.psdLed.setStyleSheet("background-color:red")
+        self.ledColor(self.psdLed,False)
         self.measLed = QPushButton()
         self.measLed.setDisabled(True)
-        self.measLed.setStyleSheet("background-color:red")
+        self.ledColor(self.measLed,False)
 
         timeDesc = QLabel(self)
         timeDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
@@ -147,52 +175,51 @@ class View(QWidget):
     def createConsoleOutputBox(self):
         self.consoleOutputBox = QGroupBox("Console Output")
         self.out = QTextBrowser()
-        self.out.append("Test")
         layout = QGridLayout()
         layout.addWidget(self.out,0,0)
         self.consoleOutputBox.setLayout(layout)
 
-    def createSetupBox(self):
-        sampleRateBox = QSpinBox()
-        sampleRateBox.setMinimum(1)
-        sampleRateBox.setMaximum(60)
-        sampleLabel = QLabel("&Sample rate [s]:")
-        sampleLabel.setBuddy(sampleRateBox)
+    @QtCore.Slot(str)
+    def appendLineToConsole(self,text):
+        self.out.append(datetime.now().strftime("[%H:%M:%S] ") + str(text))
 
-        measTimeBox = QSpinBox()
-        measTimeBox.setMinimum(1)
-        measTimeBox.setValue(60)
-        measTimeBox.setMaximum(14400)
+    def createSetupBox(self):
+        self.sampleRateBox = QSpinBox()
+        self.sampleRateBox.setMinimum(1)
+        self.sampleRateBox.setMaximum(60)
+        self.sampleTimer = QTimer(self)
+        sampleLabel = QLabel("&Sample rate [s]:")
+        sampleLabel.setBuddy(self.sampleRateBox)
+
+        self.measTimeBox = QSpinBox()
+        self.measTimeBox.setMinimum(1)
+        self.measTimeBox.setValue(60)
+        self.measTimeBox.setMaximum(14400)
+        self.measTimer = QTimer(self)
         measTimeLabel = QLabel("&Meas. time [min]:")
-        measTimeLabel.setBuddy(measTimeBox)
+        measTimeLabel.setBuddy(self.measTimeBox)
 
         dataFormats = [".csv", ".txt", ".xlsx"]
-        dataFormatBox = QComboBox()
-        dataFormatBox.addItems(dataFormats)
+        self.dataFormatBox = QComboBox()
+        self.dataFormatBox.addItems(dataFormats)
         dataFormatLabel = QLabel("&Export format:")
-        dataFormatLabel.setBuddy(dataFormatBox)
+        dataFormatLabel.setBuddy(self.dataFormatBox)
         
-        comPorts = ["none"]
-        comSelectBox = QComboBox()
-        comSelectBox.addItems(comPorts)
+        comPorts = ["not. init"]
+        self.comSelectBox = QComboBox()
+        self.comSelectBox.addItems(comPorts)
         comSelectLabel = QLabel("COM port:")
-        comSelectLabel.setBuddy(comSelectBox)
+        comSelectLabel.setBuddy(self.comSelectBox)
 
         setupLayout = QGridLayout()
         setupLayout.addWidget(sampleLabel,0,0)
-        setupLayout.addWidget(sampleRateBox,0,1)
+        setupLayout.addWidget(self.sampleRateBox,0,1)
         setupLayout.addWidget(measTimeLabel,1,0)
-        setupLayout.addWidget(measTimeBox,1,1)
+        setupLayout.addWidget(self.measTimeBox,1,1)
         setupLayout.addWidget(dataFormatLabel,2,0)
-        setupLayout.addWidget(dataFormatBox,2,1)
+        setupLayout.addWidget(self.dataFormatBox,2,1)
         setupLayout.addWidget(comSelectLabel,3,0)
-        setupLayout.addWidget(comSelectBox,3,1)
+        setupLayout.addWidget(self.comSelectBox,3,1)
 
         self.setupBox = QGroupBox("Measurement setings")
         self.setupBox.setLayout(setupLayout)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    ex = Window()
-    sys.exit(app.exec())
