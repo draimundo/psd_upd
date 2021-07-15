@@ -15,8 +15,9 @@ class MeasWorkerSignals(QtCore.QObject):
 
 
 class MeasWorker(QtCore.QRunnable):
-    def __init__(self, uartHandle, signals):
+    def __init__(self, uartHandle, exportHandle, signals):
         super(MeasWorker, self).__init__()
+        self.exportHandle = exportHandle
         self.uartHandle = uartHandle
         self.signals = signals
 
@@ -36,4 +37,6 @@ class MeasWorker(QtCore.QRunnable):
 
         ret = "Measurements: x+: " + str(xpos) + "; y+: " + str(ypos) + "; x-: " + str(xneg) + "; y-: " + str(yneg) + "; temp: " + str(temp) + "\r\n" + "Measurements: xpos: " + '{:f}'.format(xposition) + "; ypos : " + '{:f}'.format(yposition) + "; xdev: " + '{:f}'.format(xdeviation) + "; ydev: " + '{:f}'.format(ydeviation)
         
+        self.exportHandle.writeRow([str(xpos), str(ypos), str(xneg), str(yneg), str(xposition), str(yposition), str(xdeviation), str(ydeviation)])
+
         self.signals.result.emit(ret)

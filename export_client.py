@@ -5,3 +5,32 @@
  # @ Description:
  '''
 
+import xlsxwriter
+import csv
+
+class exportClientXlsx:
+    def init(self,filename):
+        self.filename = filename
+        self.workbook = xlsxwriter.Workbook('{:s}.xlsx'.format(filename))
+        self.worksheet = self.workbook.add_worksheet()
+        self.row = 0
+
+    def writeRow(self,writeList):
+        for col, data in enumerate(writeList):
+            self.worksheet.write(self.row,col,data)
+            self.row += 1
+
+    def close(self):
+        self.workbook.close()
+
+class exportClientCsv:
+    def init(self,filename):
+        self.filename = filename
+        self.csvFile = open('{:s}.csv'.format(filename), mode='w')
+        self.writer = csv.writer(self.csvFile)
+    
+    def writeRow(self,writeList):
+        self.writer.writerow(writeList)
+
+    def close(self):
+        self.csvFile.close()

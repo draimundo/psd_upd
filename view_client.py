@@ -6,12 +6,13 @@
  '''
 
 from datetime import datetime
+from export_client import exportClientCsv, exportClientXlsx
 from meas_client import MeasWorkerSignals, MeasWorker
 from numpy import double
 from serial_client import Serial_client
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QComboBox, QGroupBox, QHBoxLayout, QLabel, QGridLayout, QPushButton, QSpinBox, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QGridLayout, QPushButton, QSpinBox, QTextBrowser, QVBoxLayout, QWidget
 
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -67,11 +68,16 @@ class View(QWidget):
         self.ledColor(self.uartLed,True)
 
         self.psdReady()
-
         self.measReady()
-
         self.measRunning()
 
+
+        if(self.dataFormatBox.currentText() == ".xlsx"):
+            self.exportClient = exportClientXlsx()
+        elif (self.dataFormatBox.currentText() == ".csv"):
+            self.exportClient = exportClientCsv()
+        
+        self.initExportClient()
 
         self.sampleTimer.timeout.connect(self.getMeas)
         self.sampleTimer.start(self.sampleRateBox.value()*1000) #TODO race condition
@@ -82,13 +88,25 @@ class View(QWidget):
         self.displayTimer.timeout.connect(self.updateTimeField)
         self.displayTimer.start(50)
 
+        
+    def initExportClient(self):
+        options = QFileDialog.Options()
+        #options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getSaveFileName(self,"QFileDialog.getSaveFileName()","","All Files (*);;Text Files (*.txt)", options=options)
+        self.exportClient.init(fileName)
+        self.exportClient.writeRow(["Measurement date: {:s}".format(str(datetime.now()))])
+        self.exportClient.writeRow(["Sampling rate: {:d} second(s) between measurements".format(self.sampleRateBox.value())])
+        self.exportClient.writeRow(["Deviation from the optimal 90° tracker angle"])
+        self.exportClient.writeRow(["ts","x+","y+","x-","y-","x-position [mm]", "y-position [mm]", "x-deviation [deg]", "y-deviation [deg]"])
+
+
     def updateTimeField(self):
         rem = self.measTimer.remainingTime()
         min,sec = divmod(rem/1000,60)
         self.timeText.setText('<b>{:g}:{:.1f}<\b>'.format(min,sec))
 
     def getMeas(self):
-        measWorker = MeasWorker(uartHandle=self.serial, signals=self.measSignal)
+        measWorker = MeasWorker(uartHandle=self.serial, exportHandle=self.exportClient, signals=self.measSignal)
         self.threadpool.start(measWorker)
 
     def psdReady(self):
@@ -97,7 +115,6 @@ class View(QWidget):
             self.ledColor(self.psdLed,True)
             self.appendLineToConsole("PSD is ready")
             # TODO PSD not ready... 
-
 
     def measReady(self):
         ret = self.serial.writeread(b"b")
@@ -133,6 +150,9 @@ class View(QWidget):
         self.ledColor(self.psdLed,False)
         
         self.appendLineToConsole("- - - - - - - - - - - - -")
+
+        self.exportClient.close()
+
 
     def ledColor(self,led,status):
         if status:
