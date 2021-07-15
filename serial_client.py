@@ -30,6 +30,8 @@ class Serial_client():
 
   def close(self):
     try:
+      self.serial_client.reset_input_buffer()
+      self.serial_client.reset_output_buffer()
       self.serial_client.close()
       ret = self.serial_client.port + " closed."
     except Exception as ex:

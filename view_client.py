@@ -1,7 +1,7 @@
 '''
  # @ Author: Daniel Raimundo (DR)
  # @ Create Time: 2021-07-14 07:47:05
- # @ Modified time: 2021-07-14 07:47:17
+ # @ Modified time: 2021-07-15 08:19:25
  # @ Description:
  '''
 
@@ -67,16 +67,29 @@ class View(QWidget):
         self.ledColor(self.uartLed,True)
 
         self.psdReady()
+
         self.measReady()
+
         self.measRunning()
 
-        self.sampleTimer.setInterval(self.sampleRateBox.value()*1000)
-        ret = self.sampleTimer.interval()
-        self.measTimer.setInterval(self.measTimeBox.value()*1000)
 
+        self.sampleTimer.timeout.connect(self.getMeas)
+        self.sampleTimer.start(self.sampleRateBox.value()*1000) #TODO race condition
+
+        self.measTimer.timeout.connect(self.stopMeas)
+        self.measTimer.start(self.measTimeBox.value()*60*1000)
+
+        self.displayTimer.timeout.connect(self.updateTimeField)
+        self.displayTimer.start(50)
+
+    def updateTimeField(self):
+        rem = self.measTimer.remainingTime()
+        min,sec = divmod(rem/1000,60)
+        self.timeText.setText('<b>{:g}:{:.1f}<\b>'.format(min,sec))
+
+    def getMeas(self):
         measWorker = MeasWorker(uartHandle=self.serial, signals=self.measSignal)
-        QtCore.QObject.connect(self.sampleTimer, QtCore.SIGNAL("timeout()"), measWorker.run())
-        self.sampleTimer.start()
+        self.threadpool.start(measWorker)
 
     def psdReady(self):
         ret = self.serial.writeread(b"a")
@@ -100,6 +113,17 @@ class View(QWidget):
             #Meas not ready... TODO
 
     def stopMeas(self):
+        self.sampleTimer.timeout.disconnect()
+        self.sampleTimer.stop()
+        self.serial.close()
+
+        self.measTimer.timeout.disconnect()
+        self.measTimer.stop()
+        
+        self.displayTimer.timeout.disconnect()
+        self.displayTimer.stop()
+        self.timeText.setText('<b>-<\b>')
+
         self.startButton.setDisabled(False)
         self.stopButton.setEnabled(False)
         self.setupBox.setDisabled(False)
@@ -107,7 +131,7 @@ class View(QWidget):
         self.ledColor(self.measLed,False)
         self.ledColor(self.uartLed,False)
         self.ledColor(self.psdLed,False)
-        self.serial.close()
+        
         self.appendLineToConsole("- - - - - - - - - - - - -")
 
     def ledColor(self,led,status):
@@ -141,6 +165,7 @@ class View(QWidget):
         self.measLed.setDisabled(True)
         self.ledColor(self.measLed,False)
 
+        self.displayTimer = QTimer(self)
         timeDesc = QLabel(self)
         timeDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
         timeDesc.setText("Ending measurements in:")
@@ -199,7 +224,7 @@ class View(QWidget):
         measTimeLabel = QLabel("&Meas. time [min]:")
         measTimeLabel.setBuddy(self.measTimeBox)
 
-        dataFormats = [".csv", ".txt", ".xlsx"]
+        dataFormats = [".csv", ".xlsx"]
         self.dataFormatBox = QComboBox()
         self.dataFormatBox.addItems(dataFormats)
         dataFormatLabel = QLabel("&Export format:")

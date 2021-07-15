@@ -37,6 +37,3 @@ class MeasWorker(QtCore.QRunnable):
         ret = "Measurements: x+: " + str(xpos) + "; y+: " + str(ypos) + "; x-: " + str(xneg) + "; y-: " + str(yneg) + "; temp: " + str(temp) + "\r\n" + "Measurements: xpos: " + '{:f}'.format(xposition) + "; ypos : " + '{:f}'.format(yposition) + "; xdev: " + '{:f}'.format(xdeviation) + "; ydev: " + '{:f}'.format(ydeviation)
         
         self.signals.result.emit(ret)
-
-
-        
