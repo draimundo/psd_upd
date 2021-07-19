@@ -50,6 +50,7 @@ class Serial_client():
     try:
       ret = self.serial_client.read_until(expected=b"\0")
       ret = ret[:-1].decode('ascii') #remove eol
+      print(ret)
     except Exception as ex:
       ret = str(ex)
     return ret

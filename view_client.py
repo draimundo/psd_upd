@@ -6,8 +6,12 @@
  '''
 
 from datetime import datetime
+import os.path
+
+from PySide6 import QtGui
+from PySide6 import QtWidgets
 from export_client import exportClientCsv, exportClientXlsx
-from meas_client import MeasWorkerSignals, MeasWorker
+from meas_client import MeasWorkerPlotSignal, MeasWorker, MeasWorkerTextSignal
 from numpy import double
 from serial_client import Serial_client
 
@@ -26,10 +30,13 @@ class View(QWidget):
         self.startButton.clicked.connect(self.startMeas)
         self.stopButton.clicked.connect(self.stopMeas)
 
+        self.exportClient = None
         self.serial = Serial_client()
         self.threadpool = QtCore.QThreadPool()
-        self.measSignal = MeasWorkerSignals()
-        self.measSignal.result.connect(self.appendLineToConsole)
+        self.textSignal = MeasWorkerTextSignal()
+        self.plotSignal = MeasWorkerPlotSignal()
+        self.textSignal.result.connect(self.appendLineToConsole)
+        self.plotSignal.result.connect(self.addToPlot)
 
         self.comSelectBox.removeItem(0)
         self.comSelectBox.addItems(self.serial.listPorts())
@@ -70,12 +77,6 @@ class View(QWidget):
         self.psdReady()
         self.measReady()
         self.measRunning()
-
-
-        if(self.dataFormatBox.currentText() == ".xlsx"):
-            self.exportClient = exportClientXlsx()
-        elif (self.dataFormatBox.currentText() == ".csv"):
-            self.exportClient = exportClientCsv()
         
         self.initExportClient()
 
@@ -91,14 +92,34 @@ class View(QWidget):
         
     def initExportClient(self):
         options = QFileDialog.Options()
-        #options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getSaveFileName(self,"QFileDialog.getSaveFileName()","","All Files (*);;Text Files (*.txt)", options=options)
-        self.exportClient.init(fileName)
-        self.exportClient.writeRow(["Measurement date: {:s}".format(str(datetime.now()))])
-        self.exportClient.writeRow(["Sampling rate: {:d} second(s) between measurements".format(self.sampleRateBox.value())])
-        self.exportClient.writeRow(["Deviation from the optimal 90° tracker angle"])
-        self.exportClient.writeRow(["ts","x+","y+","x-","y-","x-position [mm]", "y-position [mm]", "x-deviation [deg]", "y-deviation [deg]"])
-
+        options |= QFileDialog.DontUseNativeDialog
+        #fileName, _ = QFileDialog.getSaveFileName(self,"Save File",datetime.now().strftime("%Y-%m-%d_%H%M%S"),"All Files (*);;Excel Files (*.xlsx);;Comma-Separated-Values (*.csv)", options=options)
+        
+        dialog = QtWidgets.QFileDialog()
+        dialog.setOptions(QFileDialog.DontUseNativeDialog)
+        dialog.setFilter(dialog.filter() | QtCore.QDir.Hidden)
+        dialog.selectFile(datetime.now().strftime("%Y%m%d_%H%M%S-PSDMeas") + self.dataFormatBox.currentText())
+        dialog.setDefaultSuffix(self.dataFormatBox.currentText())
+        dialog.setAcceptMode(QtWidgets.QFileDialog.AcceptSave)
+        dialog.setNameFilters(['Comma-Separated Values (*.csv)', 'Excel Files (*.xlsx)'])
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            fileName = dialog.selectedFiles()[0]
+            extension = os.path.splitext(fileName)[1]
+            if(extension == ".xlsx"):
+                self.exportClient = exportClientXlsx()
+            elif(extension == ".csv"):
+                self.exportClient = exportClientCsv()
+            else:
+                self.appendLineToConsole("Extension not supported. Data will not be exported.")
+                return
+            self.appendLineToConsole("Writing data to {:s} .".format(str(fileName)))
+            self.exportClient.init(fileName)
+            self.exportClient.writeRow(["Measurement date: {:s}".format(datetime.now().strftime("%Y/%m/%d"))])
+            self.exportClient.writeRow(["Sampling rate: {:d} second(s) between measurements".format(self.sampleRateBox.value())])
+            self.exportClient.writeRow(["Deviation from the optimal 90° tracker angle"])
+            self.exportClient.writeRow(["Local Time","x+","y+","x-","y-","x-position [mm]", "y-position [mm]", "x-deviation [deg]", "y-deviation [deg]"])
+        else:
+            self.appendLineToConsole("Operation cancelled. Data will not be exported.")
 
     def updateTimeField(self):
         rem = self.measTimer.remainingTime()
@@ -106,7 +127,7 @@ class View(QWidget):
         self.timeText.setText('<b>{:g}:{:.1f}<\b>'.format(min,sec))
 
     def getMeas(self):
-        measWorker = MeasWorker(uartHandle=self.serial, exportHandle=self.exportClient, signals=self.measSignal)
+        measWorker = MeasWorker(uartHandle=self.serial, exportHandle=self.exportClient, plotSignal=self.plotSignal, textSignal=self.textSignal)
         self.threadpool.start(measWorker)
 
     def psdReady(self):
@@ -150,8 +171,8 @@ class View(QWidget):
         self.ledColor(self.psdLed,False)
         
         self.appendLineToConsole("- - - - - - - - - - - - -")
-
-        self.exportClient.close()
+        if(self.exportClient != None):
+            self.exportClient.close()
 
 
     def ledColor(self,led,status):
@@ -211,11 +232,22 @@ class View(QWidget):
     def createPositionDisplayBox(self):
         self.plot = pg.PlotWidget()
         self.plot.setAspectLocked()
+        self.plot.showGrid(x=True, y=True)
+        self.plot.setXRange(-10,10)
+        self.plot.setYRange(-10,10)
         layout = QGridLayout()
         layout.addWidget(self.plot,0,0)
 
+        self.scatterItem = pg.ScatterPlotItem()
+        self.plot.addItem(self.scatterItem)
+
         self.positionDisplayBox = QGroupBox("Position")
         self.positionDisplayBox.setLayout(layout)
+        self.plotInit = False
+
+    @QtCore.Slot(float,float)
+    def addToPlot(self,x,y):
+        self.scatterItem.setData(x=[x],y=[y])
 
     def createConsoleOutputBox(self):
         self.consoleOutputBox = QGroupBox("Console Output")
@@ -261,8 +293,8 @@ class View(QWidget):
         setupLayout.addWidget(self.sampleRateBox,0,1)
         setupLayout.addWidget(measTimeLabel,1,0)
         setupLayout.addWidget(self.measTimeBox,1,1)
-        setupLayout.addWidget(dataFormatLabel,2,0)
-        setupLayout.addWidget(self.dataFormatBox,2,1)
+        #setupLayout.addWidget(dataFormatLabel,2,0)
+        #setupLayout.addWidget(self.dataFormatBox,2,1)
         setupLayout.addWidget(comSelectLabel,3,0)
         setupLayout.addWidget(self.comSelectBox,3,1)
 
