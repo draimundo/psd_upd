@@ -6,9 +6,9 @@
  '''
 
 from datetime import datetime
+
+from numpy import double, arctan, pi
 from PySide6 import QtCore
-import numpy
-from numpy import double
 
 
 class MeasWorkerTextSignal(QtCore.QObject):
@@ -37,16 +37,16 @@ class MeasWorker(QtCore.QRunnable):
 
         if(den != 0):
             xposition = (5.7 * ((xpos + yneg) - (xneg + ypos))) / den
-            xdeviation = numpy.arctan(xposition/67.4)*(180/numpy.pi)
+            xdeviation = arctan(xposition/67.4)*(180/pi)
 
             yposition = (5.7 * ((xpos + ypos) - (xneg + yneg))) / den
-            ydeviation = numpy.arctan(yposition/67.4)*(180/numpy.pi)
+            ydeviation = arctan(yposition/67.4)*(180/pi)
 
             text = "Measurements: x+: " + str(xpos) + "; y+: " + str(ypos) + "; x-: " + str(xneg) + "; y-: " + str(yneg) + "; temp: " + str(temp) + "\r\n" + "Measurements: xpos: " + '{:f}'.format(xposition) + "; ypos : " + '{:f}'.format(yposition) + "; xdev: " + '{:f}'.format(xdeviation) + "; ydev: " + '{:f}'.format(ydeviation)
             if(self.exportHandle!=None):
                 self.exportHandle.writeRow([datetime.now().strftime("%H:%M:%S.%f")[:-4], str(xpos), str(ypos), str(xneg), str(yneg), str(xposition), str(yposition), str(xdeviation), str(ydeviation)])
 
-            self.plotSignal.result.emit(xposition, yposition)
+            self.plotSignal.result.emit(xdeviation, ydeviation)
         else:
             text = "Denominator == 0 = (x+ = " + str(xpos) + " ) + (y+ = " + str(ypos) + " ) + (x- = " + str(xneg) + " ) + (y- = " + str(yneg) + " ); temp: " + str(temp) + "\r\n"
         self.textSignal.result.emit(text)

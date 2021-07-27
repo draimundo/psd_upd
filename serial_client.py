@@ -5,7 +5,6 @@
  # @ Description:
  '''
 
-from numpy import exp
 import serial
 import serial.tools.list_ports
 
@@ -36,6 +35,7 @@ class Serial_client():
       ret = self.serial_client.port + " closed."
     except Exception as ex:
       ret = str(ex)
+
     return ret
 
   def write(self,data):
@@ -50,7 +50,6 @@ class Serial_client():
     try:
       ret = self.serial_client.read_until(expected=b"\0")
       ret = ret[:-1].decode('ascii') #remove eol
-      print(ret)
     except Exception as ex:
       ret = str(ex)
     return ret
@@ -63,7 +62,6 @@ class Serial_client():
     b = []
     for a in list(serial.tools.list_ports.comports()):
       b.append(a.device)
-    #print(b)
     return b
 
 if __name__ == "__main__":

@@ -8,11 +8,9 @@
 from datetime import datetime
 import os.path
 
-from PySide6 import QtGui
 from PySide6 import QtWidgets
 from export_client import exportClientCsv, exportClientXlsx
 from meas_client import MeasWorkerPlotSignal, MeasWorker, MeasWorkerTextSignal
-from numpy import double
 from serial_client import Serial_client
 
 from PySide6.QtCore import QTimer
@@ -29,6 +27,9 @@ class View(QWidget):
 
         self.startButton.clicked.connect(self.startMeas)
         self.stopButton.clicked.connect(self.stopMeas)
+
+        self.dataX = []
+        self.dataY = []
 
         self.exportClient = None
         self.serial = Serial_client()
@@ -241,13 +242,15 @@ class View(QWidget):
         self.scatterItem = pg.ScatterPlotItem()
         self.plot.addItem(self.scatterItem)
 
-        self.positionDisplayBox = QGroupBox("Position")
+        self.positionDisplayBox = QGroupBox("Deviation [deg]")
         self.positionDisplayBox.setLayout(layout)
         self.plotInit = False
 
     @QtCore.Slot(float,float)
     def addToPlot(self,x,y):
-        self.scatterItem.setData(x=[x],y=[y])
+        self.dataX.append(x)
+        self.dataY.append(y)
+        self.scatterItem.setData(x=self.dataX,y=self.dataY)
 
     def createConsoleOutputBox(self):
         self.consoleOutputBox = QGroupBox("Console Output")
