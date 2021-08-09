@@ -9,6 +9,7 @@ from datetime import datetime
 
 from numpy import double, arctan, pi
 from PySide6 import QtCore
+import numpy
 
 
 class MeasWorkerTextSignal(QtCore.QObject):
@@ -27,11 +28,19 @@ class MeasWorker(QtCore.QRunnable):
 
     def run(self):
         self.uartHandle.write(b"d")
-        xpos = double(self.uartHandle.readLine())
-        ypos = double(self.uartHandle.readLine())
-        xneg = double(self.uartHandle.readLine())
-        yneg = double(self.uartHandle.readLine())
-        temp = double(self.uartHandle.readLine())/10.0
+        try:
+            xpos = double(self.uartHandle.readLine())
+            ypos = double(self.uartHandle.readLine())
+            xneg = double(self.uartHandle.readLine())
+            yneg = double(self.uartHandle.readLine())
+            temp = double(self.uartHandle.readLine())/10.0
+        except ValueError:
+            self.textSignal.result.emit("<b>UART port not valid -- RANDOM VALUES as measurements</b>")
+            xpos = numpy.random.random_integers(1,5000)
+            ypos = numpy.random.random_integers(1,5000)
+            xneg = numpy.random.random_integers(1,5000)
+            yneg = numpy.random.random_integers(1,5000)
+            temp = double(numpy.random.random_integers(1,500))/10.0
 
         den = 2 * (xpos + ypos + xneg + yneg)
 
@@ -44,7 +53,7 @@ class MeasWorker(QtCore.QRunnable):
 
             text = "Measurements: x+: " + str(xpos) + "; y+: " + str(ypos) + "; x-: " + str(xneg) + "; y-: " + str(yneg) + "; temp: " + str(temp) + "\r\n" + "Measurements: xpos: " + '{:f}'.format(xposition) + "; ypos : " + '{:f}'.format(yposition) + "; xdev: " + '{:f}'.format(xdeviation) + "; ydev: " + '{:f}'.format(ydeviation)
             if(self.exportHandle!=None):
-                self.exportHandle.writeRow([datetime.now().strftime("%H:%M:%S.%f")[:-4], str(xpos), str(ypos), str(xneg), str(yneg), str(xposition), str(yposition), str(xdeviation), str(ydeviation)])
+                self.exportHandle.writeRow([datetime.now().strftime("%H:%M:%S.%f")[:-4], str(xpos), str(ypos), str(xneg), str(yneg), str(xposition), str(yposition), str(xdeviation), str(ydeviation), str(temp)])
 
             self.plotSignal.result.emit(xdeviation, ydeviation)
         else:

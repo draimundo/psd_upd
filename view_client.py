@@ -27,9 +27,7 @@ class View(QWidget):
 
         self.startButton.clicked.connect(self.startMeas)
         self.stopButton.clicked.connect(self.stopMeas)
-
-        self.dataX = []
-        self.dataY = []
+        self.clearButton.clicked.connect(self.clearPlot)
 
         self.exportClient = None
         self.serial = Serial_client()
@@ -82,7 +80,7 @@ class View(QWidget):
         self.initExportClient()
 
         self.sampleTimer.timeout.connect(self.getMeas)
-        self.sampleTimer.start(self.sampleRateBox.value()*1000) #TODO race condition
+        self.sampleTimer.start(self.sampleRateBox.value()*1000)
 
         self.measTimer.timeout.connect(self.stopMeas)
         self.measTimer.start(self.measTimeBox.value()*60*1000)
@@ -111,6 +109,7 @@ class View(QWidget):
             elif(extension == ".csv"):
                 self.exportClient = exportClientCsv()
             else:
+                self.exportClient = None
                 self.appendLineToConsole("Extension not supported. Data will not be exported.")
                 return
             self.appendLineToConsole("Writing data to {:s} .".format(str(fileName)))
@@ -118,8 +117,9 @@ class View(QWidget):
             self.exportClient.writeRow(["Measurement date: {:s}".format(datetime.now().strftime("%Y/%m/%d"))])
             self.exportClient.writeRow(["Sampling rate: {:d} second(s) between measurements".format(self.sampleRateBox.value())])
             self.exportClient.writeRow(["Deviation from the optimal 90° tracker angle"])
-            self.exportClient.writeRow(["Local Time","x+","y+","x-","y-","x-position [mm]", "y-position [mm]", "x-deviation [deg]", "y-deviation [deg]"])
+            self.exportClient.writeRow(["Local Time","x+","y+","x-","y-","x-position [mm]", "y-position [mm]", "x-deviation [deg]", "y-deviation [deg]", "temperature [deg. C]"])
         else:
+            self.exportClient = None
             self.appendLineToConsole("Operation cancelled. Data will not be exported.")
 
     def updateTimeField(self):
@@ -186,6 +186,8 @@ class View(QWidget):
         self.startButton = QPushButton("START")
         self.stopButton = QPushButton("STOP")
         self.stopButton.setDisabled(True)
+        
+        self.clearButton = QPushButton("CLEAR DISPLAY")
 
         uartDesc = QLabel(self)
         uartDesc.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
@@ -218,14 +220,16 @@ class View(QWidget):
         layout = QGridLayout()
         layout.addWidget(self.startButton,0,0,1,3)
         layout.addWidget(self.stopButton,0,3,1,3)
-        layout.addWidget(uartDesc,1,0,1,2)
-        layout.addWidget(self.uartLed,2,0,1,2)
-        layout.addWidget(psdDesc,1,2,1,2)
-        layout.addWidget(self.psdLed,2,2,1,2)
-        layout.addWidget(measDesc,1,4,1,2)
-        layout.addWidget(self.measLed,2,4,1,2)
-        layout.addWidget(timeDesc,3,0,1,6)
-        layout.addWidget(self.timeText,4,0,1,6)
+        layout.addWidget(self.clearButton,1,0,1,6)
+        layout.addWidget(uartDesc,2,0,1,2)
+        layout.addWidget(self.uartLed,3,0,1,2)
+        layout.addWidget(psdDesc,2,2,1,2)
+        layout.addWidget(self.psdLed,3,2,1,2)
+        layout.addWidget(measDesc,2,4,1,2)
+        layout.addWidget(self.measLed,3,4,1,2)
+        layout.addWidget(timeDesc,4,0,1,6)
+        layout.addWidget(self.timeText,5,0,1,6)
+        
 
         self.controlBox = QGroupBox("Control and Status")
         self.controlBox.setLayout(layout)
@@ -244,13 +248,16 @@ class View(QWidget):
 
         self.positionDisplayBox = QGroupBox("Deviation [deg]")
         self.positionDisplayBox.setLayout(layout)
-        self.plotInit = False
 
     @QtCore.Slot(float,float)
     def addToPlot(self,x,y):
-        self.dataX.append(x)
-        self.dataY.append(y)
-        self.scatterItem.setData(x=self.dataX,y=self.dataY)
+        self.scatterItem.setBrush(0.5)
+        self.scatterItem.addPoints([x],[y], brush='r')
+
+    def clearPlot(self):
+
+        self.scatterItem.setData(x=[],y=[])
+        self.appendLineToConsole("Display cleared.")
 
     def createConsoleOutputBox(self):
         self.consoleOutputBox = QGroupBox("Console Output")
